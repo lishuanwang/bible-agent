@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 
-from .data import TOPIC_MAP
+from .db import DBConfigError
 from .llm import (
     LLMConfigError,
     devotional_plan,
@@ -24,10 +24,10 @@ from .models import (
     TopicStudyResponse,
     VerseResponse,
 )
-from .retrieval import compare_versions, get_context, get_verse, keyword_search
+from .retrieval import compare_versions, get_context, get_verse, keyword_search, topic_refs
 from .safety import detect_high_risk, detect_off_topic, escalation_message, scope_message
 
-app = FastAPI(title="Bible AI Agent API", version="0.3.0")
+app = FastAPI(title="Bible AI Agent API", version="0.4.0")
 
 
 @app.get("/health")
@@ -37,7 +37,11 @@ def health() -> dict[str, str]:
 
 @app.get("/verse", response_model=VerseResponse)
 def verse(reference: str, translation: str = "CUV") -> VerseResponse:
-    text = get_verse(reference, translation)
+    try:
+        text = get_verse(reference, translation)
+    except DBConfigError as exc:
+        raise HTTPException(status_code=503, detail=f"DB config error: {exc}") from exc
+
     if not text:
         raise HTTPException(status_code=404, detail="Verse not found")
     return VerseResponse(reference=reference, text=text, translation=translation)
@@ -45,7 +49,11 @@ def verse(reference: str, translation: str = "CUV") -> VerseResponse:
 
 @app.get("/compare", response_model=CompareVerseResponse)
 def compare(reference: str) -> CompareVerseResponse:
-    versions = compare_versions(reference)
+    try:
+        versions = compare_versions(reference)
+    except DBConfigError as exc:
+        raise HTTPException(status_code=503, detail=f"DB config error: {exc}") from exc
+
     if not versions:
         raise HTTPException(status_code=404, detail="Verse not found in available translations")
     return CompareVerseResponse(reference=reference, versions=versions)
@@ -53,7 +61,11 @@ def compare(reference: str) -> CompareVerseResponse:
 
 @app.get("/context", response_model=ContextResponse)
 def context(reference: str) -> ContextResponse:
-    ctx = get_context(reference)
+    try:
+        ctx = get_context(reference)
+    except DBConfigError as exc:
+        raise HTTPException(status_code=503, detail=f"DB config error: {exc}") from exc
+
     if not ctx:
         raise HTTPException(status_code=404, detail="Context not found")
     return ctx
@@ -61,12 +73,19 @@ def context(reference: str) -> ContextResponse:
 
 @app.get("/search", response_model=list[SearchItem])
 def search(q: str, translation: str = "CUV") -> list[SearchItem]:
-    return keyword_search(q, translation=translation)
+    try:
+        return keyword_search(q, translation=translation)
+    except DBConfigError as exc:
+        raise HTTPException(status_code=503, detail=f"DB config error: {exc}") from exc
 
 
 @app.get("/topic", response_model=TopicStudyResponse)
 def topic_study(topic: str, translation: str = "CUV") -> TopicStudyResponse:
-    refs = TOPIC_MAP.get(topic, [])
+    try:
+        refs = topic_refs(topic)
+    except DBConfigError as exc:
+        raise HTTPException(status_code=503, detail=f"DB config error: {exc}") from exc
+
     verses = [SearchItem(reference=ref, text=get_verse(ref, translation) or "", score=0.9) for ref in refs]
     verses = [v for v in verses if v.text]
     return TopicStudyResponse(
@@ -79,14 +98,22 @@ def topic_study(topic: str, translation: str = "CUV") -> TopicStudyResponse:
 
 @app.get("/devotional", response_model=DevotionalPlanResponse)
 def devotional(theme: str = "安慰", days: int = 7) -> DevotionalPlanResponse:
-    refs = TOPIC_MAP.get(theme, ["Psalm 23:1"])
+    try:
+        refs = topic_refs(theme)
+    except DBConfigError as exc:
+        raise HTTPException(status_code=503, detail=f"DB config error: {exc}") from exc
+
     bounded_days = max(1, min(days, 30))
     return DevotionalPlanResponse(days=bounded_days, theme=theme, plan=devotional_plan(theme, refs, bounded_days))
 
 
 @app.get("/sermon", response_model=SermonOutlineResponse)
 def sermon(reference: str) -> SermonOutlineResponse:
-    text = get_verse(reference, "CUV")
+    try:
+        text = get_verse(reference, "CUV")
+    except DBConfigError as exc:
+        raise HTTPException(status_code=503, detail=f"DB config error: {exc}") from exc
+
     if not text:
         raise HTTPException(status_code=404, detail="Verse not found")
     generated = sermon_outline(reference)
@@ -100,7 +127,11 @@ def sermon(reference: str) -> SermonOutlineResponse:
 
 @app.get("/prayer", response_model=PrayerGuideResponse)
 def prayer(topic: str = "焦虑", translation: str = "CUV") -> PrayerGuideResponse:
-    refs = TOPIC_MAP.get(topic, ["Philippians 4:6"])
+    try:
+        refs = topic_refs(topic)
+    except DBConfigError as exc:
+        raise HTTPException(status_code=503, detail=f"DB config error: {exc}") from exc
+
     scripture = [SearchItem(reference=r, text=get_verse(r, translation) or "", score=0.9) for r in refs]
     scripture = [item for item in scripture if item.text]
     blocks = prayer_guide(topic)
@@ -115,7 +146,13 @@ def discipleship(profile: str = "初信者", weeks: int = 8) -> DiscipleshipPlan
 
 @app.get("/life-scenario", response_model=LifeScenarioResponse)
 def life_scenario(scenario: str, translation: str = "CUV") -> LifeScenarioResponse:
-    refs = TOPIC_MAP.get(scenario, TOPIC_MAP.get("智慧", []))
+    try:
+        refs = topic_refs(scenario)
+        if not refs:
+            refs = topic_refs("智慧")
+    except DBConfigError as exc:
+        raise HTTPException(status_code=503, detail=f"DB config error: {exc}") from exc
+
     passages = [SearchItem(reference=r, text=get_verse(r, translation) or "", score=0.8) for r in refs]
     passages = [item for item in passages if item.text]
     return LifeScenarioResponse(
@@ -128,7 +165,11 @@ def life_scenario(scenario: str, translation: str = "CUV") -> LifeScenarioRespon
 
 @app.get("/group-session", response_model=GroupSessionResponse)
 def group_session(theme: str = "安慰", translation: str = "CUV") -> GroupSessionResponse:
-    refs = TOPIC_MAP.get(theme, ["Psalm 23:1"])
+    try:
+        refs = topic_refs(theme)
+    except DBConfigError as exc:
+        raise HTTPException(status_code=503, detail=f"DB config error: {exc}") from exc
+
     passages = [SearchItem(reference=r, text=get_verse(r, translation) or "", score=0.8) for r in refs]
     passages = [item for item in passages if item.text]
     return GroupSessionResponse(
@@ -143,7 +184,12 @@ def group_session(theme: str = "安慰", translation: str = "CUV") -> GroupSessi
 def chat(payload: ChatRequest) -> ChatResponse:
     safety_notice = escalation_message() if detect_high_risk(payload.question) else None
     scope_notice = scope_message() if detect_off_topic(payload.question) else None
-    evidence = keyword_search(payload.question, translation=payload.translation)
+
+    try:
+        evidence = keyword_search(payload.question, translation=payload.translation)
+    except DBConfigError as exc:
+        raise HTTPException(status_code=503, detail=f"DB config error: {exc}") from exc
+
     try:
         answer = generate_answer(payload.question, evidence, payload.theology_profile)
     except LLMConfigError as exc:

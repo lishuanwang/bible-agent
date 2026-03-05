@@ -39,3 +39,7 @@ cd frontend
 npm install
 npm run dev
 ```
+
+
+## MySQL 数据库文档
+详见 `docs/mysql-readme.md`（包含表结构、初始化、环境变量、种子数据建议）。
