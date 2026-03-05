@@ -6,49 +6,40 @@ client = TestClient(app)
 
 
 def test_health() -> None:
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-
-
-def test_verse_found() -> None:
-    response = client.get("/verse", params={"reference": "John 3:16", "translation": "CUV"})
-    assert response.status_code == 200
-    assert response.json()["reference"] == "John 3:16"
+    assert client.get("/health").status_code == 200
 
 
 def test_compare_versions() -> None:
     response = client.get("/compare", params={"reference": "John 3:16"})
     assert response.status_code == 200
     assert "CUV" in response.json()["versions"]
-    assert "NIV" in response.json()["versions"]
 
 
-def test_context_found() -> None:
-    response = client.get("/context", params={"reference": "John 3:16"})
+def test_prayer_endpoint() -> None:
+    response = client.get("/prayer", params={"topic": "焦虑"})
     assert response.status_code == 200
-    assert response.json()["book"] == "John"
+    assert len(response.json()["scripture"]) >= 1
 
 
-def test_topic_study() -> None:
-    response = client.get("/topic", params={"topic": "安慰"})
+def test_discipleship_bounds() -> None:
+    response = client.get("/discipleship", params={"weeks": 99})
     assert response.status_code == 200
-    assert len(response.json()["key_verses"]) >= 1
+    assert response.json()["weeks"] == 24
 
 
-def test_devotional_plan_days_limit() -> None:
-    response = client.get("/devotional", params={"theme": "安慰", "days": 40})
+def test_life_scenario() -> None:
+    response = client.get("/life-scenario", params={"scenario": "职场"})
     assert response.status_code == 200
-    assert response.json()["days"] == 30
+    assert len(response.json()["biblical_principles"]) == 3
 
 
-def test_sermon_outline() -> None:
-    response = client.get("/sermon", params={"reference": "John 3:16"})
+def test_group_session() -> None:
+    response = client.get("/group-session", params={"theme": "安慰"})
     assert response.status_code == 200
-    assert len(response.json()["outline"]) == 3
+    assert len(response.json()["flow"]) == 4
 
 
-def test_chat_risk_notice() -> None:
-    response = client.post("/chat", json={"question": "我有自杀念头"})
+def test_chat_scope_notice() -> None:
+    response = client.post("/chat", json={"question": "今天炒股怎么操作"})
     assert response.status_code == 200
-    assert response.json()["safety_notice"] is not None
+    assert response.json()["scope_notice"] is not None

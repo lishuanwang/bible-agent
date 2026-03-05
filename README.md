@@ -1,18 +1,21 @@
 # bible-agent
 
-全功能圣经 AI Agent 基础版（FastAPI + Next.js + PostgreSQL/pgvector 设计）。
+面向圣经/基督教语境的 AI Agent（FastAPI + Next.js）。
 
-## 已实现能力（MVP+）
-- 经文查询：`/verse`
-- 多译本对照：`/compare`
-- 经文上下文：`/context`
-- 关键词检索：`/search`
+## 功能（当前实现）
+- 圣经检索：`/verse`、`/search`
+- 多译本：`/compare`
+- 上下文：`/context`
 - 主题研经：`/topic`
 - 灵修计划：`/devotional`
-- 讲章/小组问题草案：`/sermon`
-- 安全问答：`/chat`（高风险关键词转介）
+- 讲章大纲：`/sermon`
+- 祷告助手：`/prayer`
+- 门训计划：`/discipleship`
+- 人生场景建议：`/life-scenario`
+- 小组聚会模板：`/group-session`
+- 安全问答：`/chat`（高风险转介 + 语境边界提示）
 
-## Backend
+## 启动
 ```bash
 cd backend
 python -m venv .venv
@@ -21,15 +24,8 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-## Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
-```
-
-## Test
-```bash
-cd backend
-pytest
 ```

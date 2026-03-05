@@ -2,19 +2,11 @@
 
 import { useState } from 'react';
 
-type SearchItem = { reference: string; text: string; score: number };
-
-type ChatResponse = {
-  answer: string;
-  evidence: SearchItem[];
-  safety_notice?: string | null;
-};
-
 export default function Home() {
   const [question, setQuestion] = useState('');
-  const [chatResult, setChatResult] = useState<ChatResponse | null>(null);
-  const [topicResult, setTopicResult] = useState<any>(null);
-  const [devotionalResult, setDevotionalResult] = useState<any>(null);
+  const [chatResult, setChatResult] = useState<any>(null);
+  const [prayerResult, setPrayerResult] = useState<any>(null);
+  const [scenarioResult, setScenarioResult] = useState<any>(null);
 
   async function askChat() {
     const response = await fetch('http://localhost:8000/chat', {
@@ -25,47 +17,37 @@ export default function Home() {
     setChatResult(await response.json());
   }
 
-  async function loadTopic() {
-    const response = await fetch('http://localhost:8000/topic?topic=安慰');
-    setTopicResult(await response.json());
+  async function loadPrayer() {
+    const response = await fetch('http://localhost:8000/prayer?topic=焦虑');
+    setPrayerResult(await response.json());
   }
 
-  async function loadDevotional() {
-    const response = await fetch('http://localhost:8000/devotional?theme=安慰&days=5');
-    setDevotionalResult(await response.json());
+  async function loadScenario() {
+    const response = await fetch('http://localhost:8000/life-scenario?scenario=职场');
+    setScenarioResult(await response.json());
   }
 
   return (
-    <main style={{ maxWidth: 900, margin: '32px auto', fontFamily: 'sans-serif' }}>
-      <h1>Bible AI Agent - Full Feature MVP</h1>
+    <main style={{ maxWidth: 920, margin: '32px auto', fontFamily: 'sans-serif' }}>
+      <h1>Bible AI Agent - Christian Use Cases</h1>
 
       <section>
-        <h3>1) 问答（证据驱动）</h3>
-        <textarea
-          style={{ width: '100%', minHeight: 90 }}
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="例如：在焦虑里该怎么祷告？"
-        />
-        <button onClick={askChat} disabled={!question.trim()}>发送问题</button>
-        {chatResult && (
-          <div>
-            {chatResult.safety_notice && <p style={{ color: '#b91c1c' }}>{chatResult.safety_notice}</p>}
-            <pre style={{ whiteSpace: 'pre-wrap' }}>{chatResult.answer}</pre>
-          </div>
-        )}
+        <h3>1) 圣经问答</h3>
+        <textarea value={question} onChange={(e) => setQuestion(e.target.value)} style={{ width: '100%', minHeight: 80 }} />
+        <button onClick={askChat} disabled={!question.trim()}>发送</button>
+        {chatResult && <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(chatResult, null, 2)}</pre>}
       </section>
 
       <section style={{ marginTop: 24 }}>
-        <h3>2) 主题研经</h3>
-        <button onClick={loadTopic}>加载“安慰”主题</button>
-        {topicResult && <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(topicResult, null, 2)}</pre>}
+        <h3>2) 祷告助手</h3>
+        <button onClick={loadPrayer}>生成祷告引导（焦虑）</button>
+        {prayerResult && <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(prayerResult, null, 2)}</pre>}
       </section>
 
       <section style={{ marginTop: 24 }}>
-        <h3>3) 灵修计划</h3>
-        <button onClick={loadDevotional}>生成 5 天计划</button>
-        {devotionalResult && <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(devotionalResult, null, 2)}</pre>}
+        <h3>3) 人生场景（基督徒语境）</h3>
+        <button onClick={loadScenario}>职场场景建议</button>
+        {scenarioResult && <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(scenarioResult, null, 2)}</pre>}
       </section>
     </main>
   );

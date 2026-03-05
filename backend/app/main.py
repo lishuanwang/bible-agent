@@ -1,22 +1,32 @@
 from fastapi import FastAPI, HTTPException
 
 from .data import TOPIC_MAP
-from .llm import devotional_plan, generate_answer, sermon_outline
+from .llm import (
+    devotional_plan,
+    discipleship_plan,
+    generate_answer,
+    prayer_guide,
+    sermon_outline,
+)
 from .models import (
     ChatRequest,
     ChatResponse,
     CompareVerseResponse,
+    ContextResponse,
     DevotionalPlanResponse,
+    DiscipleshipPlanResponse,
+    GroupSessionResponse,
+    LifeScenarioResponse,
+    PrayerGuideResponse,
     SearchItem,
     SermonOutlineResponse,
     TopicStudyResponse,
     VerseResponse,
-    ContextResponse,
 )
 from .retrieval import compare_versions, get_context, get_verse, keyword_search
-from .safety import detect_high_risk, escalation_message
+from .safety import detect_high_risk, detect_off_topic, escalation_message, scope_message
 
-app = FastAPI(title="Bible AI Agent API", version="0.2.0")
+app = FastAPI(title="Bible AI Agent API", version="0.3.0")
 
 
 @app.get("/health")
@@ -61,28 +71,24 @@ def topic_study(topic: str, translation: str = "CUV") -> TopicStudyResponse:
     return TopicStudyResponse(
         topic=topic,
         key_verses=verses,
-        interpretation=f"主题“{topic}”建议结合上下文与整本圣经神学脉络来理解。",
-        application_questions=[
-            "这组经文揭示了神怎样的属性？",
-            "你目前的处境与这些经文的连接点是什么？",
-            "本周你可以采取什么具体顺服行动？",
-        ],
+        interpretation=f"主题“{topic}”建议放在整本圣经启示脉络中理解。",
+        application_questions=["神的心意是什么？", "我需要悔改什么？", "本周如何顺服？"],
     )
 
 
 @app.get("/devotional", response_model=DevotionalPlanResponse)
 def devotional(theme: str = "安慰", days: int = 7) -> DevotionalPlanResponse:
     refs = TOPIC_MAP.get(theme, ["Psalm 23:1"])
-    plan = devotional_plan(theme, refs, days=max(1, min(days, 30)))
-    return DevotionalPlanResponse(days=len(plan), theme=theme, plan=plan)
+    bounded_days = max(1, min(days, 30))
+    return DevotionalPlanResponse(days=bounded_days, theme=theme, plan=devotional_plan(theme, refs, bounded_days))
 
 
 @app.get("/sermon", response_model=SermonOutlineResponse)
-def sermon(reference: str, translation: str = "CUV") -> SermonOutlineResponse:
-    text = get_verse(reference, translation)
+def sermon(reference: str) -> SermonOutlineResponse:
+    text = get_verse(reference, "CUV")
     if not text:
         raise HTTPException(status_code=404, detail="Verse not found")
-    generated = sermon_outline(reference, text)
+    generated = sermon_outline(reference)
     return SermonOutlineResponse(
         reference=reference,
         title=str(generated["title"]),
@@ -91,9 +97,51 @@ def sermon(reference: str, translation: str = "CUV") -> SermonOutlineResponse:
     )
 
 
+@app.get("/prayer", response_model=PrayerGuideResponse)
+def prayer(topic: str = "焦虑", translation: str = "CUV") -> PrayerGuideResponse:
+    refs = TOPIC_MAP.get(topic, ["Philippians 4:6"])
+    scripture = [SearchItem(reference=r, text=get_verse(r, translation) or "", score=0.9) for r in refs]
+    scripture = [item for item in scripture if item.text]
+    blocks = prayer_guide(topic)
+    return PrayerGuideResponse(topic=topic, scripture=scripture, **blocks)
+
+
+@app.get("/discipleship", response_model=DiscipleshipPlanResponse)
+def discipleship(profile: str = "初信者", weeks: int = 8) -> DiscipleshipPlanResponse:
+    bounded_weeks = max(1, min(weeks, 24))
+    return DiscipleshipPlanResponse(profile=profile, weeks=bounded_weeks, milestones=discipleship_plan(profile, bounded_weeks))
+
+
+@app.get("/life-scenario", response_model=LifeScenarioResponse)
+def life_scenario(scenario: str, translation: str = "CUV") -> LifeScenarioResponse:
+    refs = TOPIC_MAP.get(scenario, TOPIC_MAP.get("智慧", []))
+    passages = [SearchItem(reference=r, text=get_verse(r, translation) or "", score=0.8) for r in refs]
+    passages = [item for item in passages if item.text]
+    return LifeScenarioResponse(
+        scenario=scenario,
+        biblical_principles=["先求神的国", "在真理里彼此相爱", "以祷告寻求智慧"],
+        suggested_passages=passages,
+        action_steps=["列出当前挑战", "对照经文写下顺服行动", "向牧者或小组寻求同行"],
+    )
+
+
+@app.get("/group-session", response_model=GroupSessionResponse)
+def group_session(theme: str = "安慰", translation: str = "CUV") -> GroupSessionResponse:
+    refs = TOPIC_MAP.get(theme, ["Psalm 23:1"])
+    passages = [SearchItem(reference=r, text=get_verse(r, translation) or "", score=0.8) for r in refs]
+    passages = [item for item in passages if item.text]
+    return GroupSessionResponse(
+        theme=theme,
+        icebreaker="请每位成员分享最近一周最感恩的一件事。",
+        passages=passages,
+        flow=["破冰与祷告", "观察经文", "解释与讨论", "应用与代祷"],
+    )
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(payload: ChatRequest) -> ChatResponse:
     safety_notice = escalation_message() if detect_high_risk(payload.question) else None
+    scope_notice = scope_message() if detect_off_topic(payload.question) else None
     evidence = keyword_search(payload.question, translation=payload.translation)
     answer = generate_answer(payload.question, evidence, payload.theology_profile)
-    return ChatResponse(answer=answer, evidence=evidence, safety_notice=safety_notice)
+    return ChatResponse(answer=answer, evidence=evidence, safety_notice=safety_notice, scope_notice=scope_notice)

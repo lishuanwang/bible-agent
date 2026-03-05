@@ -47,6 +47,34 @@ class SermonOutlineResponse(BaseModel):
     group_questions: list[str]
 
 
+class PrayerGuideResponse(BaseModel):
+    topic: str
+    scripture: list[SearchItem]
+    thanksgiving: str
+    confession: str
+    supplication: str
+
+
+class DiscipleshipPlanResponse(BaseModel):
+    profile: str
+    weeks: int
+    milestones: list[dict[str, str]]
+
+
+class LifeScenarioResponse(BaseModel):
+    scenario: str
+    biblical_principles: list[str]
+    suggested_passages: list[SearchItem]
+    action_steps: list[str]
+
+
+class GroupSessionResponse(BaseModel):
+    theme: str
+    icebreaker: str
+    passages: list[SearchItem]
+    flow: list[str]
+
+
 class ChatRequest(BaseModel):
     question: str
     translation: str = "CUV"
@@ -57,3 +85,4 @@ class ChatResponse(BaseModel):
     answer: str
     evidence: list[SearchItem]
     safety_notice: str | None = None
+    scope_notice: str | None = None
