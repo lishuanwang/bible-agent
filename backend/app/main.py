@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 
 from .data import TOPIC_MAP
 from .llm import (
+    LLMConfigError,
     devotional_plan,
     discipleship_plan,
     generate_answer,
@@ -143,5 +144,10 @@ def chat(payload: ChatRequest) -> ChatResponse:
     safety_notice = escalation_message() if detect_high_risk(payload.question) else None
     scope_notice = scope_message() if detect_off_topic(payload.question) else None
     evidence = keyword_search(payload.question, translation=payload.translation)
-    answer = generate_answer(payload.question, evidence, payload.theology_profile)
+    try:
+        answer = generate_answer(payload.question, evidence, payload.theology_profile)
+    except LLMConfigError as exc:
+        raise HTTPException(status_code=503, detail=f"LLM config error: {exc}") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LLM request failed: {exc}") from exc
     return ChatResponse(answer=answer, evidence=evidence, safety_notice=safety_notice, scope_notice=scope_notice)

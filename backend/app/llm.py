@@ -1,22 +1,66 @@
+import json
+import os
+from typing import Any
+from urllib import request
+
 from .models import SearchItem
+from .prompts import SYSTEM_PROMPT, build_user_prompt
+
+
+class LLMConfigError(RuntimeError):
+    """Raised when LLM config is missing or invalid."""
+
+
+def _chat_completion(messages: list[dict[str, str]]) -> str:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+
+    if not api_key:
+        raise LLMConfigError("OPENAI_API_KEY is not set")
+
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.3,
+    }
+
+    req = request.Request(
+        f"{base_url}/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+
+    with request.urlopen(req, timeout=30) as resp:  # nosec B310
+        response_payload: dict[str, Any] = json.loads(resp.read().decode("utf-8"))
+
+    choices = response_payload.get("choices", [])
+    if not choices:
+        raise RuntimeError("LLM returned no choices")
+
+    content = choices[0].get("message", {}).get("content", "")
+    if not content:
+        raise RuntimeError("LLM returned empty content")
+    return content
 
 
 def generate_answer(question: str, evidence: list[SearchItem], theology_profile: str) -> str:
-    if not evidence:
-        return (
-            "结论：我暂时没有检索到足够证据。\n"
-            "依据经文：暂无。\n"
-            "背景解释：请提供更具体的圣经主题或经文范围。\n"
-            "应用建议：可先从福音书、诗篇、罗马书开始。"
-        )
+    evidence_text = [f"{item.reference}: {item.text}" for item in evidence]
+    user_prompt = (
+        build_user_prompt(question, evidence_text)
+        + f"\n神学立场配置：{theology_profile}\n"
+        + "请严格按：结论、依据经文、背景解释、应用建议 输出。"
+    )
 
-    evidence_lines = "\n".join([f"- {item.reference}：{item.text}" for item in evidence])
-    return (
-        "结论：以下为基于经文证据的回应。\n"
-        f"依据经文：\n{evidence_lines}\n"
-        "背景解释：建议结合上下文、作者与原受众进行解释。\n"
-        f"神学立场提示：当前配置为 {theology_profile}。\n"
-        "应用建议：祷告、默想、与教会群体讨论并实践。"
+    return _chat_completion(
+        [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ]
     )
 
 
